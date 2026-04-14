@@ -177,12 +177,12 @@ wss.on('connection', (socket) => {
           if (clientData.roomId === roomId) {
             clientData.roomId = 'general';
 
-            const generalRoom = rooms.get('general');
+            const defaultRoom = rooms.get('general');
 
             clientSocket.send(
               JSON.stringify({
                 type: 'room_history',
-                payload: generalRoom.messages,
+                payload: defaultRoom.messages,
               }),
             );
           }
