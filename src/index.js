@@ -1,6 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 
 const PORT = 3000;
 const app = express();
@@ -24,11 +24,13 @@ function broadcastRooms() {
   }));
 
   clients.forEach((clientData, clientSocket) => {
-    if (clientSocket.readyState === clientSocket.OPEN) {
-      clientSocket.send(JSON.stringify({
-        type: 'rooms_list',
-        payload: roomsArray,
-      }));
+    if (clientSocket.readyState === WebSocket.OPEN) {
+      clientSocket.send(
+        JSON.stringify({
+          type: 'rooms_list',
+          payload: roomsArray,
+        }),
+      );
     }
   });
 }
@@ -46,6 +48,15 @@ wss.on('connection', (socket) => {
   });
   broadcastRooms();
 
+  const generalRoom = rooms.get('general');
+
+  socket.send(
+    JSON.stringify({
+      type: 'room_history',
+      payload: generalRoom.messages,
+    }),
+  );
+
   socket.on('message', (message) => {
     try {
       const parsedMessage = JSON.parse(message.toString());
@@ -54,13 +65,17 @@ wss.on('connection', (socket) => {
         const clientData = clients.get(socket);
 
         clientData.username = parsedMessage.payload.username;
-
       }
 
       if (parsedMessage.type === 'send_message') {
         const clientData = clients.get(socket);
         const room = rooms.get(clientData.roomId);
+
         if (!clientData.username) {
+          return;
+        }
+
+        if (!room) {
           return;
         }
 
@@ -75,12 +90,14 @@ wss.on('connection', (socket) => {
         clients.forEach((otherClientData, clientSocket) => {
           if (
             otherClientData.roomId === clientData.roomId &&
-            clientSocket.readyState === clientSocket.OPEN
+            clientSocket.readyState === WebSocket.OPEN
           ) {
-            clientSocket.send(JSON.stringify({
-              type: 'new_message',
-              payload: chatMessage,
-            }));
+            clientSocket.send(
+              JSON.stringify({
+                type: 'new_message',
+                payload: chatMessage,
+              }),
+            );
           }
         });
       }
@@ -98,7 +115,7 @@ wss.on('connection', (socket) => {
           id: roomId,
           name: roomName,
           messages: [],
-        }
+        };
 
         rooms.set(roomId, newRoom);
         broadcastRooms();
@@ -116,10 +133,12 @@ wss.on('connection', (socket) => {
 
         const room = rooms.get(roomId);
 
-        socket.send(JSON.stringify({
-          type: 'room_history',
-          payload: room.messages,
-        }));
+        socket.send(
+          JSON.stringify({
+            type: 'room_history',
+            payload: room.messages,
+          }),
+        );
       }
 
       if (parsedMessage.type === 'rename_room') {
@@ -160,23 +179,31 @@ wss.on('connection', (socket) => {
 
             const generalRoom = rooms.get('general');
 
-            clientSocket.send(JSON.stringify({
-              type: 'room_history',
-              payload: generalRoom.messages,
-            }));
+            clientSocket.send(
+              JSON.stringify({
+                type: 'room_history',
+                payload: generalRoom.messages,
+              }),
+            );
           }
         });
 
         broadcastRooms();
       }
     } catch (error) {
-      console.log('WebSocket message error:', error.message);
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            message: 'Something went wrong',
+          },
+        }),
+      );
     }
   });
 
   socket.on('close', () => {
     clients.delete(socket);
-    console.log('Client disconnected');
   });
 });
 
